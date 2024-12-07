@@ -151,13 +151,29 @@ export default defineComponent({
       this.listFilters = listFilters;
     },
     async openDoc(name: string) {
-      console.log('Opening doc:', {
-        schemaName: this.schemaName,
-        name,
-      });
-      const route = getFormRoute(this.schemaName, name);
-      console.log('Route:', route);
-      await routeTo(route);
+      try {
+        console.log('Opening doc:', {
+          schemaName: this.schemaName,
+          name,
+        });
+
+        // Use getAll with filter instead of getDoc
+        const docs = await fyo.db.getAll(this.schemaName, {
+          filters: { name },
+          limit: 1
+        });
+
+        if (!docs || docs.length === 0) {
+          console.error('Doc not found:', name);
+          return;
+        }
+
+        const route = getFormRoute(this.schemaName, name);
+        console.log('Route:', route);
+        await routeTo(route);
+      } catch (error) {
+        console.error('Error opening doc:', error);
+      }
     },
     async makeNewDoc() {
       if (!this.canCreate) {

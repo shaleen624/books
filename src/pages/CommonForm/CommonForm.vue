@@ -76,74 +76,75 @@
     <template #body>
       <FormHeader
         :form-title="title"
-        class="
-          sticky
-          top-0
-          bg-white
-          dark:bg-gray-890
-          border-b
-          dark:border-gray-800
-        "
+        class="sticky top-0 bg-white dark:bg-gray-890 border-b dark:border-gray-800"
       >
         <StatusPill v-if="hasDoc" :doc="doc" />
       </FormHeader>
 
-      <!-- Debug info -->
-      <div class="text-xs text-gray-500 p-2">
-        Doc: {{ hasDoc ? 'Yes' : 'No' }},
-        Schema: {{ doc?.schemaName }},
-        Role: {{ doc?.role }},
-        IsCustomer: {{ isCustomer }}
+      <!-- Loading State -->
+      <div v-if="!hasDoc" class="flex items-center justify-center p-8">
+        <div class="text-gray-600">Loading...</div>
       </div>
 
-      <!-- Section Container -->
-      <div v-if="hasDoc">
-        <!-- Customer Tabs -->
-        <div v-if="isCustomer" class="border-b">
-          <div class="flex space-x-4 px-4">
-            <button
-              v-for="tab in translatedTabs"
-              :key="tab.value"
-              @click="currentCustomerTab = tab.value"
-              :class="[
-                'py-4 px-2 -mb-px font-medium text-sm',
-                currentCustomerTab === tab.value
-                  ? 'border-b-2 border-blue-500 text-blue-600'
-                  : 'text-gray-700 hover:text-gray-900'
-              ]"
-            >
-              {{ tab.label }}
-            </button>
-          </div>
+      <!-- Content -->
+      <template v-else>
+        <!-- Debug info -->
+        <div class="text-xs text-gray-500 p-2">
+          Doc: {{ hasDoc ? 'Yes' : 'No' }},
+          Schema: {{ doc?.schemaName }},
+          Role: {{ doc?.role }},
+          IsCustomer: {{ isCustomer }}
         </div>
 
-        <!-- Content -->
-        <div class="overflow-auto custom-scroll custom-scroll-thumb1">
-          <!-- Details Tab / Regular Form -->
-          <div v-if="!isCustomer || currentCustomerTab === 'details'">
-            <CommonFormSection
-              v-for="([n, fields], idx) in activeGroup.entries()"
-              :key="n + idx"
-              ref="section"
-              class="p-4"
-              :class="idx !== 0 && activeGroup.size > 1 ? 'border-t dark:border-gray-800' : ''"
-              :show-title="activeGroup.size > 1 && n !== t`Default`"
-              :title="n"
-              :fields="fields"
-              :doc="doc"
-              :errors="errors"
-              @editrow="showRowEditForm"
-              @value-change="onValueChange"
-              @row-change="updateGroupedFields"
-            />
+        <!-- Section Container -->
+        <div>
+          <!-- Customer Tabs -->
+          <div v-if="isCustomer" class="border-b">
+            <div class="flex space-x-4 px-4">
+              <button
+                v-for="tab in translatedTabs"
+                :key="tab.value"
+                @click="currentCustomerTab = tab.value"
+                :class="[
+                  'py-4 px-2 -mb-px font-medium text-sm',
+                  currentCustomerTab === tab.value
+                    ? 'border-b-2 border-blue-500 text-blue-600'
+                    : 'text-gray-700 hover:text-gray-900'
+                ]"
+              >
+                {{ tab.label }}
+              </button>
+            </div>
           </div>
 
-          <!-- Items Tab -->
-          <div v-else-if="currentCustomerTab === 'items'" class="h-full">
-            <CustomerPriceTab :customer="doc.name" />
+          <!-- Content -->
+          <div class="overflow-auto custom-scroll custom-scroll-thumb1">
+            <!-- Details Tab / Regular Form -->
+            <div v-if="!isCustomer || currentCustomerTab === 'details'">
+              <CommonFormSection
+                v-for="([n, fields], idx) in activeGroup.entries()"
+                :key="n + idx"
+                ref="section"
+                class="p-4"
+                :class="idx !== 0 && activeGroup.size > 1 ? 'border-t dark:border-gray-800' : ''"
+                :show-title="activeGroup.size > 1 && n !== t`Default`"
+                :title="n"
+                :fields="fields"
+                :doc="doc"
+                :errors="errors"
+                @editrow="showRowEditForm"
+                @value-change="onValueChange"
+                @row-change="updateGroupedFields"
+              />
+            </div>
+
+            <!-- Items Tab -->
+            <div v-else-if="currentCustomerTab === 'items'" class="h-full">
+              <CustomerPriceTab :customer="doc.name" />
+            </div>
           </div>
         </div>
-      </div>
+      </template>
 
       <!-- Tab Bar -->
       <div
@@ -422,13 +423,14 @@ export default defineComponent({
     },
     isCustomer(): boolean {
       const result = this.hasDoc && 
-             this.doc.schemaName === 'Party' && 
-             this.doc.role === 'Customer';
+             this.docOrNull?.schemaName === 'Party' && 
+             this.docOrNull?.role === 'Customer';
       console.log('isCustomer check:', {
         hasDoc: this.hasDoc,
-        schemaName: this.doc?.schemaName,
-        role: this.doc?.role,
-        result
+        schemaName: this.docOrNull?.schemaName,
+        role: this.docOrNull?.role,
+        result,
+        docOrNull: this.docOrNull
       });
       return result;
     },
@@ -523,26 +525,37 @@ export default defineComponent({
       }
     },
     async setDoc() {
-      if (this.hasDoc) {
-        console.log('setDoc - Doc already exists:', this.docOrNull);
-        return;
+      try {
+        if (this.hasDoc) {
+          console.log('setDoc - Doc already exists:', this.docOrNull);
+          return;
+        }
+
+        console.log('setDoc - Getting new doc:', {
+          schemaName: this.schemaName,
+          name: this.name
+        });
+
+        this.docOrNull = await getDocFromNameIfExistsElseNew(
+          this.schemaName,
+          this.name
+        );
+
+        if (this.docOrNull && !this.docOrNull.initialized) {
+          await this.docOrNull.load();
+        }
+
+        console.log('setDoc - Got doc:', {
+          doc: this.docOrNull,
+          role: this.docOrNull?.role,
+          schemaName: this.docOrNull?.schemaName,
+          initialized: this.docOrNull?.initialized
+        });
+
+      } catch (error) {
+        console.error('Error setting doc:', error);
+        this.docOrNull = null;
       }
-
-      console.log('setDoc - Getting new doc:', {
-        schemaName: this.schemaName,
-        name: this.name
-      });
-
-      this.docOrNull = await getDocFromNameIfExistsElseNew(
-        this.schemaName,
-        this.name
-      );
-
-      console.log('setDoc - Got doc:', {
-        doc: this.docOrNull,
-        role: this.docOrNull?.role,
-        schemaName: this.docOrNull?.schemaName
-      });
     },
     replacePathAfterSync() {
       if (!this.hasDoc || this.doc.inserted) {
