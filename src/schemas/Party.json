@@ -1,0 +1,22 @@
+{
+  "name": "Party",
+  "label": "Party",
+  "naming": "manual",
+  "fields": [
+    {
+      "fieldname": "name",
+      "label": "Name",
+      "fieldtype": "Data",
+      "required": 1
+    },
+    {
+      "fieldname": "role",
+      "label": "Role",
+      "fieldtype": "Select",
+      "options": ["Customer", "Supplier"],
+      "required": 1,
+      "default": "Customer"
+    }
+    // ... other fields
+  ]
+} 

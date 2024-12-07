@@ -7,6 +7,7 @@ import updateSchemas from './updateSchemas';
 import setPaymentReferenceType from './setPaymentReferenceType';
 import fixLedgerDateTime from './v0_21_0/fixLedgerDateTime';
 import fixItemHSNField from './fixItemHSNField';
+import customerPrices from './version_4_customerPrices';
 
 export default [
   { name: 'testPatch', version: '0.5.0-beta.0', patch: testPatch },
@@ -42,4 +43,5 @@ export default [
     patch: fixLedgerDateTime,
   },
   { name: 'fixItemHSNField', version: '0.24.0', patch: fixItemHSNField },
+  customerPrices,
 ] as Patch[];

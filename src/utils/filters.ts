@@ -25,3 +25,14 @@ export const createFilters = {
   Customers: { role: 'Customer' },
   Party: { role: 'Both' },
 };
+
+// Export the formatting functions directly
+export function formatCurrency(value: number): string {
+  // Your currency formatting logic
+  return value.toFixed(2);
+}
+
+export function formatDate(date: string | Date): string {
+  // Your date formatting logic
+  return new Date(date).toLocaleDateString();
+}

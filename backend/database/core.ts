@@ -989,4 +989,152 @@ export default class DatabaseCore extends DatabaseBase {
       (f) => f.fieldtype === FieldTypeEnum.Table
     ) as TargetField[];
   }
+
+  async #createCustomerPricingTables() {
+    // Customer Item Price table
+    await this.knex!.schema.createTable('CustomerItemPrice', (table) => {
+      table.string('name').primary();
+      table.string('customer')
+        .references('name')
+        .inTable('Party')
+        .onDelete('CASCADE');
+      table.string('item')
+        .references('name')
+        .inTable('Item')
+        .onDelete('CASCADE');
+      table.decimal('rate', 12, 2);
+      table.string('createdBy');
+      table.string('modifiedBy');
+      table.timestamp('created').defaultTo(this.knex!.fn.now());
+      table.timestamp('modified').defaultTo(this.knex!.fn.now());
+      
+      // Ensure unique customer-item combination
+      table.unique(['customer', 'item']);
+    });
+
+    // Price History table
+    await this.knex!.schema.createTable('CustomerItemPriceHistory', (table) => {
+      table.string('name').primary();
+      table.string('customer')
+        .references('name')
+        .inTable('Party')
+        .onDelete('CASCADE');
+      table.string('item')
+        .references('name')
+        .inTable('Item')
+        .onDelete('CASCADE');
+      table.decimal('oldRate', 12, 2);
+      table.decimal('newRate', 12, 2);
+      table.string('modifiedBy');
+      table.timestamp('modified').defaultTo(this.knex!.fn.now());
+      table.string('source').defaultTo('manual'); // manual, bulk_import, invoice
+    });
+
+    // Add settings table for price comparison visibility
+    await this.knex!.schema.alterTable('SystemSettings', (table) => {
+      table.boolean('showPriceComparison').defaultTo(true);
+    });
+  }
+
+  async getCustomerPrices(customer: string, items?: string[]) {
+    let query = this.knex!('CustomerItemPrice')
+      .where('customer', customer)
+      .select(['item', 'rate', 'modified']);
+      
+    if (items?.length) {
+      query = query.whereIn('item', items);
+    }
+
+    return await query;
+  }
+
+  async getCustomerPriceHistory(customer: string, item: string, limit = 5) {
+    return await this.knex!('CustomerItemPriceHistory')
+      .where({ customer, item })
+      .orderBy('modified', 'desc')
+      .limit(limit)
+      .select(['oldRate', 'newRate', 'modified', 'modifiedBy', 'source']);
+  }
+
+  async updateCustomerPrice(
+    customer: string, 
+    item: string, 
+    rate: number, 
+    modifiedBy: string,
+    source = 'manual'
+  ) {
+    const trx = await this.knex!.transaction();
+    
+    try {
+      // Get current price if exists
+      const current = await trx('CustomerItemPrice')
+        .where({ customer, item })
+        .first();
+
+      if (current) {
+        // Add to history
+        await trx('CustomerItemPriceHistory').insert({
+          name: getRandomString(),
+          customer,
+          item,
+          oldRate: current.rate,
+          newRate: rate,
+          modifiedBy,
+          source
+        });
+
+        // Update current price
+        await trx('CustomerItemPrice')
+          .where({ customer, item })
+          .update({ 
+            rate,
+            modifiedBy,
+            modified: new Date().toISOString()
+          });
+      } else {
+        // Insert new price
+        await trx('CustomerItemPrice').insert({
+          name: getRandomString(),
+          customer,
+          item,
+          rate,
+          createdBy: modifiedBy,
+          modifiedBy
+        });
+      }
+
+      await trx.commit();
+    } catch (error) {
+      await trx.rollback();
+      throw error;
+    }
+  }
+
+  async bulkUpdateCustomerPrices(
+    updates: Array<{
+      customer: string;
+      item: string;
+      rate: number;
+    }>,
+    modifiedBy: string
+  ) {
+    const trx = await this.knex!.transaction();
+    
+    try {
+      for (const update of updates) {
+        await this.updateCustomerPrice(
+          update.customer,
+          update.item,
+          update.rate,
+          modifiedBy,
+          'bulk_import'
+        );
+      }
+      
+      await trx.commit();
+    } catch (error) {
+      await trx.rollback();
+      throw error;
+    }
+  }
 }

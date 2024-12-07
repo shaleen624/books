@@ -16,6 +16,8 @@ import type { HistoryState } from 'vue-router';
 import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router';
 import { historyState } from './utils/refs';
 
+const PartyForm = () => import('./pages/Party/PartyForm.vue');
+
 const routes: RouteRecordRaw[] = [
   {
     path: '/',
@@ -24,6 +26,21 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/get-started',
     component: GetStarted,
+  },
+  {
+    path: `/edit/Party/:name`,
+    name: 'PartyForm',
+    components: {
+      default: PartyForm,
+      edit: QuickEditForm,
+    },
+    props: {
+      default: (route) => ({
+        schemaName: 'Party',
+        name: route.params.name,
+      }),
+      edit: (route) => route.query,
+    },
   },
   {
     path: `/edit/:schemaName/:name`,

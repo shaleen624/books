@@ -151,7 +151,12 @@ export default defineComponent({
       this.listFilters = listFilters;
     },
     async openDoc(name: string) {
+      console.log('Opening doc:', {
+        schemaName: this.schemaName,
+        name,
+      });
       const route = getFormRoute(this.schemaName, name);
+      console.log('Route:', route);
       await routeTo(route);
     },
     async makeNewDoc() {

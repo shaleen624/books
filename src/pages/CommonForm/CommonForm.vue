@@ -88,30 +88,61 @@
         <StatusPill v-if="hasDoc" :doc="doc" />
       </FormHeader>
 
+      <!-- Debug info -->
+      <div class="text-xs text-gray-500 p-2">
+        Doc: {{ hasDoc ? 'Yes' : 'No' }},
+        Schema: {{ doc?.schemaName }},
+        Role: {{ doc?.role }},
+        IsCustomer: {{ isCustomer }}
+      </div>
+
       <!-- Section Container -->
-      <div
-        v-if="hasDoc"
-        class="overflow-auto custom-scroll custom-scroll-thumb1"
-      >
-        <CommonFormSection
-          v-for="([n, fields], idx) in activeGroup.entries()"
-          :key="n + idx"
-          ref="section"
-          class="p-4"
-          :class="
-            idx !== 0 && activeGroup.size > 1
-              ? 'border-t dark:border-gray-800'
-              : ''
-          "
-          :show-title="activeGroup.size > 1 && n !== t`Default`"
-          :title="n"
-          :fields="fields"
-          :doc="doc"
-          :errors="errors"
-          @editrow="(doc: Doc) => showRowEditForm(doc)"
-          @value-change="onValueChange"
-          @row-change="updateGroupedFields"
-        />
+      <div v-if="hasDoc">
+        <!-- Customer Tabs -->
+        <div v-if="isCustomer" class="border-b">
+          <div class="flex space-x-4 px-4">
+            <button
+              v-for="tab in translatedTabs"
+              :key="tab.value"
+              @click="currentCustomerTab = tab.value"
+              :class="[
+                'py-4 px-2 -mb-px font-medium text-sm',
+                currentCustomerTab === tab.value
+                  ? 'border-b-2 border-blue-500 text-blue-600'
+                  : 'text-gray-700 hover:text-gray-900'
+              ]"
+            >
+              {{ tab.label }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Content -->
+        <div class="overflow-auto custom-scroll custom-scroll-thumb1">
+          <!-- Details Tab / Regular Form -->
+          <div v-if="!isCustomer || currentCustomerTab === 'details'">
+            <CommonFormSection
+              v-for="([n, fields], idx) in activeGroup.entries()"
+              :key="n + idx"
+              ref="section"
+              class="p-4"
+              :class="idx !== 0 && activeGroup.size > 1 ? 'border-t dark:border-gray-800' : ''"
+              :show-title="activeGroup.size > 1 && n !== t`Default`"
+              :title="n"
+              :fields="fields"
+              :doc="doc"
+              :errors="errors"
+              @editrow="showRowEditForm"
+              @value-change="onValueChange"
+              @row-change="updateGroupedFields"
+            />
+          </div>
+
+          <!-- Items Tab -->
+          <div v-else-if="currentCustomerTab === 'items'" class="h-full">
+            <CustomerPriceTab :customer="doc.name" />
+          </div>
+        </div>
       </div>
 
       <!-- Tab Bar -->
@@ -203,10 +234,12 @@ import {
   routeTo,
 } from 'src/utils/ui';
 import { useDocShortcuts } from 'src/utils/vueUtils';
-import { computed, defineComponent, inject, nextTick, ref } from 'vue';
+import { computed, defineComponent, inject, nextTick, ref, onMounted } from 'vue';
 import CommonFormSection from './CommonFormSection.vue';
 import LinkedEntries from './LinkedEntries.vue';
 import RowEditForm from './RowEditForm.vue';
+import CustomerPriceTab from '@/components/CustomerPrices/CustomerPriceTab.vue';
+import { t } from 'fyo';
 
 export default defineComponent({
   components: {
@@ -220,6 +253,7 @@ export default defineComponent({
     LinkedEntries,
     RowEditForm,
     StatusPill,
+    CustomerPriceTab,
   },
   provide() {
     return {
@@ -248,12 +282,17 @@ export default defineComponent({
   data() {
     return {
       errors: {},
-      activeTab: this.t`Default`,
+      activeTab: 'Default',
       groupedFields: null,
       isPrintable: false,
       showLinks: false,
       useFullWidth: false,
       row: null,
+      currentCustomerTab: 'details',
+      customerTabs: [
+        { label: 'Details', value: 'details' },
+        { label: 'Items', value: 'items' }
+      ],
     } as {
       errors: Record<string, string>;
       activeTab: string;
@@ -262,6 +301,8 @@ export default defineComponent({
       showLinks: boolean;
       useFullWidth: boolean;
       row: null | { index: number; fieldname: string };
+      currentCustomerTab: string;
+      customerTabs: Array<{ label: string; value: string }>;
     };
   },
   computed: {
@@ -379,23 +420,57 @@ export default defineComponent({
 
       return getGroupedActionsForDoc(this.doc);
     },
+    isCustomer(): boolean {
+      const result = this.hasDoc && 
+             this.doc.schemaName === 'Party' && 
+             this.doc.role === 'Customer';
+      console.log('isCustomer check:', {
+        hasDoc: this.hasDoc,
+        schemaName: this.doc?.schemaName,
+        role: this.doc?.role,
+        result
+      });
+      return result;
+    },
+    translatedTabs(): Array<{ label: string; value: string }> {
+      return [
+        { label: this.t`Details`, value: 'details' },
+        { label: this.t`Items`, value: 'items' }
+      ];
+    },
   },
   beforeMount() {
     this.useFullWidth = !!this.fyo.singles.Misc?.useFullWidth;
   },
   async mounted() {
-    if (this.fyo.store.isDevelopment) {
-      // @ts-ignore
-      window.cf = this;
-    }
+    console.log('CommonForm mounted - BEFORE setDoc:', {
+      hasDoc: this.hasDoc,
+      schemaName: this.schemaName,
+      name: this.name,
+    });
 
     await this.setDoc();
+
+    console.log('CommonForm mounted - AFTER setDoc:', {
+      hasDoc: this.hasDoc,
+      doc: this.docOrNull,
+      schemaName: this.doc?.schemaName,
+      role: this.doc?.role,
+      isCustomer: this.isCustomer
+    });
+
     this.replacePathAfterSync();
     this.updateGroupedFields();
     if (this.groupedFields) {
       this.activeTab = [...this.groupedFields.keys()][0];
     }
     this.isPrintable = await isPrintable(this.schemaName);
+
+    console.log('CommonForm mounted with:', {
+      schemaName: this.schemaName,
+      name: this.name,
+      doc: this.doc
+    });
   },
   activated(): void {
     this.useFullWidth = !!this.fyo.singles.Misc?.useFullWidth;
@@ -449,13 +524,25 @@ export default defineComponent({
     },
     async setDoc() {
       if (this.hasDoc) {
+        console.log('setDoc - Doc already exists:', this.docOrNull);
         return;
       }
+
+      console.log('setDoc - Getting new doc:', {
+        schemaName: this.schemaName,
+        name: this.name
+      });
 
       this.docOrNull = await getDocFromNameIfExistsElseNew(
         this.schemaName,
         this.name
       );
+
+      console.log('setDoc - Got doc:', {
+        doc: this.docOrNull,
+        role: this.docOrNull?.role,
+        schemaName: this.docOrNull?.schemaName
+      });
     },
     replacePathAfterSync() {
       if (!this.hasDoc || this.doc.inserted) {
@@ -497,5 +584,16 @@ export default defineComponent({
       this.updateGroupedFields();
     },
   },
+  watch: {
+    'doc.role'(newRole) {
+      console.log('Role changed:', newRole);
+    },
+    'doc.schemaName'(newSchema) {
+      console.log('Schema changed:', newSchema);
+    },
+    isCustomer(newValue) {
+      console.log('isCustomer changed:', newValue);
+    }
+  }
 });
 </script>
